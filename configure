@@ -1,0 +1,170 @@
+#!/bin/bash
+#
+# Copyright (c) 2016 HLRS, University of Stuttgart. All rights reserved.
+#
+# Author(s): Marius Poke <marius.poke@hlrs.de>
+#
+
+echo "$0 $@" > config.log
+
+define(){ IFS='\n' read -r -d '' ${1} || true; }
+
+define HELP <<'EOF'
+Script for creating Makefile
+usage  : $0 [options]
+options: [--prefix=DIR]                # Installation directory
+         [--with-ev=DIR]               # ev installation directory
+         [--with-mpfr=DIR]             # mpfr installation directory
+         [--with-gmp=DIR]              # gmp installation directory
+         [--enable-ibv]                # enable IBV network module
+         [--with-ibv=DIR]              # IB verbs installation directory
+         [--with-rdmacm=DIR]           # RDMA-CM installation directory
+EOF
+
+usage () {
+    echo -e "$HELP"
+}
+
+ErrorAndExit () {
+  echo "ERROR: $1"
+  exit 1
+}
+
+CheckDirectory () {
+    if [ ! -d $2 ]
+    then
+       ErrorAndExit "$1: Folder $2 not found."
+    fi 
+}
+
+ForceAbsolutePath () {
+  case "$2" in
+    /* )
+      ;;
+    *)
+      ErrorAndExit "Expected an absolute path for $1"
+      ;;
+  esac
+}
+
+########################
+# Command line parsing #
+########################
+
+PREFIX=$PWD
+EVDIR=""
+MPFRDIR=""
+GMPDIR=""
+AC_IBV=""
+IBVDIR=""
+RDMACMDIR=""
+IBV_LIB=""
+RDMACM_LIB=""
+RDMACM_INC=""
+DEF_AC_IBV=""
+MF="Makefile"
+#~ if [[ "x${HOSTNAME:0:7}" == "xeslogin" ]]; then
+    #~ MPICC=cc
+#~ else 
+    #~ MPICC=mpicc
+#~ fi
+
+for arg in "$@"
+do
+  case ${arg} in
+  --help|-help|-h)
+        usage
+        exit 1
+        ;;
+   --prefix=*)
+        PREFIX=`echo $arg | sed -e 's/--prefix=//'`
+        PREFIX=`eval echo ${PREFIX}`    # tilde and variable expansion
+        ForceAbsolutePath "--prefix" "${PREFIX}"
+        ;;
+   --with-ev=*)
+        EVDIR=`echo $arg | sed -e 's/--with-ev=//'`
+        EVDIR=`eval echo ${EVDIR}`    # tilde and variable expansion
+        CheckDirectory "--with-ev" "${EVDIR}"
+        ;;
+   --with-mpfr=*)
+        MPFRDIR=`echo $arg | sed -e 's/--with-mpfr=//'`
+        MPFRDIR=`eval echo ${MPFRDIR}`    # tilde and variable expansion
+        CheckDirectory "--with-mpfr" "${MPFRDIR}"
+        ;;
+   --with-gmp=*)
+        GMPDIR=`echo $arg | sed -e 's/--with-gmp=//'`
+        GMPDIR=`eval echo ${GMPDIR}`    # tilde and variable expansion
+        CheckDirectory "--with-gmp" "${GMPDIR}"
+        ;;
+   --enable-ibv)
+        AC_IBV="\$(AC_IBV)"
+        DEF_AC_IBV="-DAC_IBV"
+        ;;
+   --with-ibv=*)
+        IBVDIR=`echo $arg | sed -e 's/--with-ibv=//'`
+        IBVDIR=`eval echo ${IBVDIR}`    # tilde and variable expansion
+        CheckDirectory "--with-ibv" "${IBVDIR}"
+        ;;
+   --with-rdmacm=*)
+        RDMACMDIR=`echo $arg | sed -e 's/--with-rdmacm=//'`
+        RDMACMDIR=`eval echo ${RDMACMDIR}`    # tilde and variable expansion
+        CheckDirectory "--with-rdmacm" "${RDMACMDIR}"
+        ;;
+  esac
+done
+
+if [[ "x$EVDIR" == "x" ]]; then
+    ErrorAndExit "No libev installation directory defined: --with-ev."
+fi
+
+if [[ "x$MPFRDIR" == "x" ]]; then
+    ErrorAndExit "No MPFR installation directory defined: --with-mpfr."
+fi
+
+if [[ "x$GMPDIR" == "x" ]]; then
+    ErrorAndExit "No GMP installation directory defined: --with-gmp."
+fi
+
+if [[ "x${AC_IBV}" != "x" ]]; then
+    # IB Verbs enabled
+    if [[ "x$IBVDIR" == "x" ]]; then
+        # no IB Verbs installation provided; look for one on the system
+        OUT=`/sbin/ldconfig -p | grep librdma`
+        if [[ "x$OUT" == "x" ]]; then
+            ErrorAndExit "IBV network module requires librdmacm: --with-rdmacm."
+        fi
+        OUT=`/sbin/ldconfig -p | grep libibverbs`
+        if [[ "x$OUT" == "x" ]]; then
+            ErrorAndExit "IBV network module requires libibverbs: --with-ibv."
+            # use own RDMA-CM
+        fi
+        IBV_LIB="-libverbs"
+        RDMACM_LIB="-lrdmacm"
+    else
+        # IB Verbs installation provided
+        if [[ "x$RDMACMDIR" == "x" ]]; then
+            ErrorAndExit "IBV network module requires librdmacm: --with-rdmacm."
+        fi
+        IBV_LIB="-L${IBVDIR}/lib/ -Wl,-rpath=${IBVDIR}/lib/ -libverbs"
+        RDMACM_LIB="-L${RDMACMDIR}/lib/ -Wl,-rpath=${RDMACMDIR}/lib/ -lrdmacm"
+        RDMACM_INC="-I${RDMACMDIR}/include/"
+    fi    
+fi
+
+
+# Generate Makefile from Makefile.in
+cp ${MF}.in ${MF}
+sed -e 's,#PREFIX#,'${PREFIX}',' \
+    -e 's,#EV_LIB#,'${EVDIR}'/lib/libev.a,' \
+    -e 's,#EV_INCLUDE#,-I'${EVDIR}'/include,' \
+    -e 's,#MPFR_LIB#,'${MPFRDIR}'/lib/libmpfr.a,' \
+    -e 's,#MPFR_INCLUDE#,-I'${MPFRDIR}'/include,' \
+    -e 's,#GMP_LIB#,'${GMPDIR}'/lib/libgmp.a,' \
+    -e 's,#GMP_INCLUDE#,-I'${GMPDIR}'/include,' \
+    -e 's,#AC_IBV#,'${AC_IBV}',' \
+    -e 's,#DEF_AC_IBV#,'${DEF_AC_IBV}',' \
+    -e 's|#IBV_LIB#|'"${IBV_LIB}"'|g' \
+    -e 's|#RDMACM_LIB#|'"${RDMACM_LIB}"'|g' \
+    -e 's,#RDMACM_INC#,'${RDMACM_INC}',' \
+    ${MF} > sed.out && mv sed.out ${MF} || exit 1
+

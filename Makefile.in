@@ -1,0 +1,171 @@
+#
+# Copyright (c) 2016 HLRS, University of Stuttgart. All rights reserved.
+#
+# Author(s): Marius Poke <marius.poke@hlrs.de>
+#
+
+CC = gcc
+MPICC=mpicc
+HOST=$(shell hostname)
+ifneq (, $(findstring eslogin,$(HOST)))
+	# XC40
+	MPICC=cc
+endif
+
+FLAGS        = -I./include -I. \
+			   -I./net \
+               -I./utils/rbtree/include \
+               -I./utils/ft-digraph/include #EV_INCLUDE# #DEF_AC_IBV#
+CFLAGS       = #-Wall -Wunused-function #-Wextra
+
+PREFIX  = #PREFIX#
+LIBPATH = $(PREFIX)/lib
+BINDIR = $(PREFIX)/bin
+
+HEADERS = $(shell echo include/*.h)
+SRCS = $(shell echo src/*.c)
+OBJS = $(SRCS:.c=.o)
+TARGET = $(BINDIR)/allconcur
+
+LOGGP_SRCS = $(shell echo loggp/*.c)
+LOGGP_OBJS = $(LOGGP_SRCS:.c=.o)
+LOGGP = $(BINDIR)/loggp
+LOGGP_LAUNCH = $(BINDIR)/loggp_launcher
+
+AC_TCP_HEADERS = $(shell echo net/tcp/include/*.h)
+AC_TCP_SRCS = $(shell echo  net/tcp/src/*.c)
+AC_TCP_OBJS = $(AC_TCP_SRCS:.c=.o)
+AC_TCP = $(LIBPATH)/libactcp.a
+
+AC_IBV_HEADERS = $(shell echo net/ibv/include/*.h)
+AC_IBV_SRCS = $(shell echo  net/ibv/src/*.c)
+AC_IBV_OBJS = $(AC_IBV_SRCS:.c=.o)
+AC_IBV = $(LIBPATH)/libacibv.a
+
+RBTREE_HEADERS = $(shell echo utils/rbtree/include/*.h)
+RBTREE_SRCS = $(shell echo  utils/rbtree/src/*.c)
+RBTREE_OBJS = $(RBTREE_SRCS:.c=.o)
+RBTREE = $(LIBPATH)/librbtree.a
+
+DIGRAPH_HEADERS = $(shell echo utils/ft-digraph/include/*.h)
+DIGRAPH_SRCS = $(shell echo  utils/ft-digraph/src/*.c)
+DIGRAPH_OBJS = $(DIGRAPH_SRCS:.c=.o)
+DIGRAPH = $(LIBPATH)/libdigraph.a
+
+FTDIGRAPH_SRCS = $(shell echo  utils/ft-digraph/*.c)
+FTDIGRAPH_OBJS = $(FTDIGRAPH_SRCS:.c=.o)
+FTDIGRAPH = $(BINDIR)/ft-digraph
+
+ALLCONCUR_LAUNCH = $(BINDIR)/allconcur_launcher
+
+all: allconcur loggp ftdigraph mpi
+
+allconcur: FLAGS += #MPFR_INCLUDE# #GMP_INCLUDE# 
+allconcur: LDFLAGS = #MPFR_LIB# #GMP_LIB# #EV_LIB# \
+		$(AC_TCP) $(RBTREE) $(DIGRAPH) \
+		#AC_IBV# #RDMACM_LIB# #IBV_LIB# -lpthread -lm -lrt -ldl
+allconcur: $(TARGET)
+$(TARGET): $(AC_TCP) #AC_IBV# $(RBTREE) $(DIGRAPH) allconcur_print $(OBJS) $(HEADERS) 
+	mkdir -pm 755 $(BINDIR)
+	$(CC) $(FLAGS) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
+	@echo "##############################"
+	@echo
+allconcur_print:
+	@echo "##### BUILDING AllConcur #####"
+	
+loggp: LDFLAGS = #EV_LIB# $(AC_TCP) \
+		#AC_IBV# #RDMACM_LIB# #IBV_LIB# -lpthread -lm -lrt -ldl
+loggp: $(LOGGP)
+$(LOGGP): loggp_print $(AC_TCP) #AC_IBV# $(LOGGP_OBJS) $(HEADERS)
+	mkdir -pm 755 $(BINDIR)
+	$(CC) $(FLAGS) $(CFLAGS) -o $(LOGGP) $(LOGGP_OBJS) $(LDFLAGS)
+	@echo "########################################"
+	@echo
+loggp_print:
+	@echo "##### BUILDING the LogGP estimator #####"
+
+ftdigraph: FLAGS += #MPFR_INCLUDE# #GMP_INCLUDE#
+ftdigraph: LDFLAGS = #MPFR_LIB# #GMP_LIB# -lm
+ftdigraph: $(FTDIGRAPH)
+$(FTDIGRAPH): ftdigraph_print $(FTDIGRAPH_OBJS) $(DIGRAPH_OBJS) $(DIGRAPH_HEADERS)
+	mkdir -pm 755 $(BINDIR)
+	$(CC) $(FLAGS) $(CFLAGS) -o $(FTDIGRAPH) $(FTDIGRAPH_OBJS) $(DIGRAPH_OBJS) $(LDFLAGS)
+	@echo "###############################################"
+	@echo
+ftdigraph_print:
+	@echo "##### BUILDING the Fault-Tolerant Digraph #####"
+
+mpi: $(ALLCONCUR_LAUNCH) $(LOGGP_LAUNCH)
+$(ALLCONCUR_LAUNCH): 
+	@echo "##### BUILDING the MPI Launcheres #####"
+	mkdir -pm 755 $(BINDIR)
+	$(MPICC) $(FLAGS) $(CFLAGS) -o $(ALLCONCUR_LAUNCH) test/allconcur_launcher.c
+	$(MPICC) $(FLAGS) $(CFLAGS) -o $(LOGGP_LAUNCH) test/loggp_launcher.c
+	@echo "######################################"
+	@echo
+	
+$(AC_TCP): FLAGS += -I./net/tcp/include
+$(AC_TCP): ac_tcp_print $(AC_TCP_OBJS) $(AC_TCP_HEADERS)
+	mkdir -pm 755 $(LIBPATH)
+	ar -rcs $@ $(AC_TCP_OBJS)
+	@echo "###############################################"
+	@echo
+ac_tcp_print:
+	@echo "##### BUILDING TCP network module library #####"
+	
+$(AC_IBV): FLAGS += -I./net/ibv/include #RDMACM_INC#
+$(AC_IBV): ac_ibv_print $(AC_IBV_OBJS) $(AC_IBV_HEADERS)
+	mkdir -pm 755 $(LIBPATH)
+	ar -rcs $@ $(AC_IBV_OBJS)
+	@echo "###############################################"
+	@echo
+ac_ibv_print:
+	@echo "##### BUILDING IBV network module library #####"
+	
+$(RBTREE): rbtree_print $(RBTREE_OBJS) $(RBTREE_HEADERS)
+	mkdir -pm 755 $(LIBPATH)
+	ar -rcs $@ $(RBTREE_OBJS)
+	@echo "###############################################"
+	@echo
+rbtree_print:
+	@echo "##### BUILDING the Red-Black Tree library #####"
+	
+$(DIGRAPH): digraph_print $(DIGRAPH_OBJS) $(DIGRAPH_HEADERS)
+	mkdir -pm 755 $(LIBPATH)
+	ar -rcs $@ $(DIGRAPH_OBJS)
+	@echo "#######################################################"
+	@echo
+digraph_print:
+	@echo "##### BUILDING the fault-tolerant digraph library #####"
+
+benchmark: FLAGS += -DBENCHMARK
+benchmark: allconcur loggp mpi
+	
+info: FLAGS += -DINFO
+info: allconcur loggp ftdigraph mpi
+	
+debug: FLAGS += -DDEBUG -DBENCHMARK -g -O0 
+debug: allconcur loggp ftdigraph mpi
+
+prof: FLAGS += -g -pg
+prof: allconcur loggp ftdigraph mpi
+	
+clean:
+	@echo "##### CLEAN-UP #####"
+	-rm -f $(OBJS) $(TARGET)
+	-rm -f $(LOGGP_OBJS) $(LOGGP)	
+	-rm -f $(AC_TCP_OBJS) $(AC_TCP)
+	-rm -f $(AC_IBV_OBJS) $(AC_IBV)
+	-rm -f $(RBTREE_OBJS) $(RBTREE)
+	-rm -f $(FTDIGRAPH_OBJS) $(DIGRAPH_OBJS) $(DIGRAPH) $(FTDIGRAPH)
+	-rm -f $(ALLCONCUR_LAUNCH) $(LOGGP_LAUNCH)
+	@echo "####################"
+	@echo
+
+distclean: clean
+	-rm -f Makefile
+	
+%.o: %.c $(HEADERS) 
+	$(CC) $(FLAGS) $(CFLAGS) -c -o $@ $<
+	
+.PHONY : all clean distclean
