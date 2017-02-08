@@ -2,7 +2,7 @@
 ## Algorithm for LeaderLess CONCURrent atomic broadcast
 
 #### Brief 
-An implementation of the AllConcur algorithm over both TCP/IP and InfiniBand Verbs.
+An implementation of the AllConcur algorithm over both TCP/IP and InfiniBand Verbs [1].
 
 #### Building benchmarks
 
@@ -95,7 +95,7 @@ mpirun -np 8 ./bin/allconcur_launcher -n 8 -s 1024 --throughput -b 512
     - ctrl_sm.c -- control state machine (for consistency of control data)
     - client_listener.c -- listening for incoming client requests 
 - ./include -- header files
-- ./loggp -- code for computing LogGP params (based on Netgauge [1])
+- ./loggp -- code for computing LogGP params (based on Netgauge [2])
 - ./net -- network module
     - ibv -- InfiniBand verbs
     - tcp -- TCP sockets
@@ -103,7 +103,7 @@ mpirun -np 8 ./bin/allconcur_launcher -n 8 -s 1024 --throughput -b 512
 - ./utils
     - ft-digraph -- fault tolerant digraph library
     - rbtree -- red-black Trees implementation (Linux)
-- ./tla -- TLA+[2] specifcation and proofs 
+- ./tla -- TLA+[3] specifcation and proofs 
 
 
 #### Avoid 200ms delay on TCP ([reduce TCP RTO on Linux] (http://unix.stackexchange.com/questions/210367/changing-the-tcp-rto-value-in-linux))
@@ -125,6 +125,8 @@ default via 10.0.2.2 dev eth0  rto_min lock 5ms
 ``` 
 
 #### References
+[1] M. Poke, T. Hoefler, and C. W. Glass: *Allconcur: Leaderless concurrent atomic broadcast (extended version)*, CoRR, abs/1608.05866, 2016.
 
-[1] T. Hoefler, A. Lichei and W. Rehm: *Low-Overhead LogGP Parameter Assessment for Modern Interconnection Networks*, IEEE IPDPS 2007 
-[2] L. Lamport: *Specifying Systems: The TLA+ Language and Tools for Hardware and Software Engineers*, Addison-Wesley Longman Publishing Co., Inc., Boston, MA, USA, 2002
+[2] T. Hoefler, A. Lichei and W. Rehm: *Low-Overhead LogGP Parameter Assessment for Modern Interconnection Networks*, IEEE IPDPS 2007 
+
+[3] L. Lamport: *Specifying Systems: The TLA+ Language and Tools for Hardware and Software Engineers*, Addison-Wesley Longman Publishing Co., Inc., Boston, MA, USA, 2002
