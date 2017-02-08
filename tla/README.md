@@ -19,4 +19,5 @@ A formal specification of AllConcur written in the TLA+ specification language [
 #### References
 
 [1] L. Lamport: *Specifying Systems: The TLA+ Language and Tools for Hardware and Software Engineers*, Addison-Wesley Longman Publishing Co., Inc., Boston, MA, USA, 2002
+
 [2] Rodeheffer TL: *The Naiad clock protocol: Specification, model checking, and correctness proof*, Tech. Rep. MSR-TR-2013-20, Microsoft Research, Redmond, Feb 2013.
